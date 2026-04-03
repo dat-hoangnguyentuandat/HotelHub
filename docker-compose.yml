@@ -1,0 +1,77 @@
+networks:
+  hotelhub-net:
+    driver: bridge
+
+volumes:
+  mysql-data:
+  backend-uploads:
+
+services:
+
+  # ── MySQL 8 ───────────────────────────────────────────────────────────────
+  db:
+    image: mysql:8.0
+    container_name: hotelhub-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: hotelhub
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    networks:
+      - hotelhub-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Backend (Spring Boot REST API) ────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: ${DOCKER_HUB_USERNAME}/hotelhub-backend:${IMAGE_TAG:-latest}
+    container_name: hotelhub-backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PORT: 8081
+      DATABASE_URL: jdbc:mysql://db:3306/hotelhub?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC
+      DATABASE_USERNAME: ${DB_USER}
+      DATABASE_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      CORS_ORIGINS: http://localhost:8080,http://${VPS_IP}:8080
+      LOG_LEVEL: INFO
+    volumes:
+      - backend-uploads:/app/uploads
+    ports:
+      - "8081:8081"
+    networks:
+      - hotelhub-net
+
+  # ── Frontend (Spring Boot Thymeleaf) ──────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: ${DOCKER_HUB_USERNAME}/hotelhub-frontend:${IMAGE_TAG:-latest}
+    container_name: hotelhub-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      PORT: 8080
+      BACKEND_URL: http://backend:8081
+      THYMELEAF_CACHE: "true"
+      LOG_LEVEL: INFO
+    ports:
+      - "8080:8080"
+    networks:
+      - hotelhub-net
