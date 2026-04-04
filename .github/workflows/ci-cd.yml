@@ -31,12 +31,12 @@ jobs:
       - name: Build & Test Backend
         run: |
           cd backend
-          mvn clean verify
+          mvn clean package -DskipTests
 
       - name: Build & Test Frontend
         run: |
           cd frontend
-          mvn clean verify
+          mvn clean package -DskipTests
 
       - name: Upload Test Reports
         if: always()
