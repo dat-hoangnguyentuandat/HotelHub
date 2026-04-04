@@ -115,13 +115,27 @@ jobs:
       - name: Notify n8n
         if: success()
         run: |
-          curl -X POST http://e1.chiasegpu.vn:18032/webhook/deploy-success \
+          echo "Calling n8n webhook..."
+          
+          # Escape JSON strings
+          REPO="${{ github.repository }}"
+          COMMIT="${{ github.sha }}"
+          AUTHOR="${{ github.event.head_commit.author.name }}"
+          MESSAGE=$(echo '${{ github.event.head_commit.message }}' | jq -Rs .)
+          TIMESTAMP="${{ github.event.head_commit.timestamp }}"
+          
+          RESPONSE=$(curl -X POST http://e1.chiasegpu.vn:18032/webhook/deploy-success \
             -H "Content-Type: application/json" \
-            -d '{
-              "repository": "${{ github.repository }}",
-              "commit_sha": "${{ github.sha }}",
-              "status": "success",
-              "timestamp": "${{ github.event.head_commit.timestamp }}",
-              "author": "${{ github.event.head_commit.author.name }}",
-              "message": "${{ github.event.head_commit.message }}"
-            }'
+            -d "{
+              \"repository\": \"$REPO\",
+              \"commit_sha\": \"$COMMIT\",
+              \"status\": \"success\",
+              \"timestamp\": \"$TIMESTAMP\",
+              \"author\": \"$AUTHOR\",
+              \"message\": $MESSAGE
+            }" -w "\nHTTP_CODE:%{http_code}")
+          
+          echo "Response: $RESPONSE"
+          if [[ ! "$RESPONSE" =~ "HTTP_CODE:200" ]]; then
+            echo "Warning: n8n webhook failed, but deployment succeeded"
+          fi
